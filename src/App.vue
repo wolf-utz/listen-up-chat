@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
+import { ref, nextTick, watch } from "vue";
 import AudioPlayer from "./components/AudioPlayer.vue";
 
 interface Message {
@@ -7,7 +7,7 @@ interface Message {
   text: string;
   sent: boolean;
   timestamp: Date;
-  type?: "text" | "story" | "question";
+  type?: "text" | "story" | "question" | "evaluation" | "feedback" | "error";
   data?: any;
 }
 
@@ -60,7 +60,7 @@ watch(() => messages.value.length, () => {
   });
 }, { immediate: true });
 const requestId = ref("");
-const isDragging = ref(false);
+// Removed unused isDragging variable
 const waitingForAnswer = ref(false);
 const questionsStarted = ref(false);
 const currentStory = ref<StoryData | null>(null);
@@ -291,25 +291,13 @@ const sendMessage = async () => {
   newMessage.value = "";
   nextTick(() => {
     const container = document.querySelector(".chat-container");
-    if (container) container.scrollTop = container.scrollHeight;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   });
 };
 
 // Format time in MM:SS format
-const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-};
-
-// Add global keyboard event listener
-onMounted(() => {
-  document.addEventListener("keydown", handleKeyPress);
-  return () => {
-    document.removeEventListener("keydown", handleKeyPress);
-  };
-});
-
 // Handle keyboard shortcuts
 const handleKeyPress = (e: KeyboardEvent) => {
   // Only handle if not in an input field
@@ -317,7 +305,6 @@ const handleKeyPress = (e: KeyboardEvent) => {
   if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
     return;
   }
-
   // Space key handling is now managed by the AudioPlayer component
 };
 
@@ -339,7 +326,7 @@ const showQuestions = (storyData: StoryData) => {
   });
 
   // Add bot message with first question
-  const questionMessage = {
+  const questionMessage: Message = {
     id: `question-${Date.now()}`,
     text: currentQuestions.value[0]?.text || "No question available",
     sent: false,
@@ -350,7 +337,7 @@ const showQuestions = (storyData: StoryData) => {
   console.log("Adding question message:", questionMessage);
   messages.value.push(questionMessage);
 
-  // Auto-scroll is now handled by the watcher
+  // Auto-scroll is handled by the watcher
 };
 </script>
 
