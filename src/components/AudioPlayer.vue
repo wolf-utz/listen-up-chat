@@ -280,25 +280,6 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="progress-container">
-        <div
-          class="progress-bar"
-          @click="handleProgressClick"
-          @mousedown="startDrag"
-          @mousemove="handleDrag"
-          @mouseup="stopDrag"
-          @mouseleave="isDragging && stopDrag()"
-          ref="progressBar"
-        >
-          <div class="progress" :style="{ width: `${audioProgress}%` }">
-            <div class="progress-knob" :class="{ dragging: isDragging }"></div>
-          </div>
-        </div>
-        <div class="time-display">
-          <span>{{ formatTime(audioElement.currentTime || 0) }}</span>
-        </div>
-      </div>
-
       <!-- Playback speed control -->
       <div class="playback-speed-container">
         <button
@@ -335,6 +316,26 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <div class="progress-container">
+      <div
+        class="progress-bar"
+        @click="handleProgressClick"
+        @mousedown="startDrag"
+        @mousemove="handleDrag"
+        @mouseup="stopDrag"
+        @mouseleave="isDragging && stopDrag()"
+        ref="progressBar"
+      >
+        <div class="progress" :style="{ width: `${audioProgress}%` }">
+          <div class="progress-knob" :class="{ dragging: isDragging }"></div>
+        </div>
+      </div>
+      <div class="time-display">
+        <span>{{ formatTime(audioElement.currentTime || 0) }}</span>
+      </div>
+    </div>
+
     <div class="audio-player-hint">
       <svg
         xmlns="http://www.w3.org/2000/svg"

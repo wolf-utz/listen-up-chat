@@ -597,10 +597,11 @@ html,
 }
 
 .topic-selection {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+  max-width: 100%;
 }
 
 .topic-button {
@@ -664,7 +665,8 @@ html,
 
 .input-container {
   display: flex;
-  padding: 15px;
+  flex-direction: row;
+  padding: 12px 15px;
   background: #fff;
   border-top: 1px solid #e0e0e0;
   position: sticky;
@@ -681,9 +683,11 @@ textarea {
   resize: none;
   outline: none;
   font-size: 15px;
+  min-height: 80px; /* Height for about two paragraphs */
   max-height: 150px;
   transition: all 0.2s;
   line-height: 1.5;
+  overflow-y: auto;
 }
 
 textarea:focus {
@@ -703,6 +707,7 @@ button {
   transition: all 0.2s;
   white-space: nowrap;
   margin-left: 8px;
+  flex-shrink: 0;
 }
 
 button:disabled {
@@ -731,5 +736,42 @@ button:not(:disabled):hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 600px) {
+  .input-container {
+    flex-direction: column;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  textarea {
+    width: 100%;
+    margin: 0;
+    padding: 10px 16px;
+    /* min-height: 44px;
+    max-height: 120px; */
+  }
+
+  button {
+    /* width: 100%; */
+    margin: 0;
+    height: 44px;
+  }
+
+  .message {
+    max-width: 90%;
+  }
+
+  .app {
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .chat-container {
+    padding: 12px;
+  }
 }
 </style>
