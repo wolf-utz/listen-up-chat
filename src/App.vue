@@ -22,7 +22,7 @@ interface StoryData {
 const messages = ref<Message[]>([
   {
     id: 1,
-    text: "Hi, ich bin Deutschobot 3000 und ich helfe dir dein Hörverständnis zu verbessern, indem ich dir eine kleine Übungsaufgabe erstelle. Wähle ein Thema aus der folgenden Liste aus.",
+    text: "Hi, ich bin HörMalZu-Bot und ich helfe dir dein Hörverständnis zu verbessern, indem ich dir eine kleine Übungsaufgabe erstelle. Wähle ein Thema aus der folgenden Liste aus.",
     sent: false,
     timestamp: new Date(),
   },
@@ -52,13 +52,17 @@ const currentQuestions = ref<Array<{ text: string; id: number }>>([]);
 const chatContainer = ref<HTMLElement | null>(null);
 
 // Auto-scroll to bottom when messages change
-watch(() => messages.value.length, () => {
-  nextTick(() => {
-    if (chatContainer.value) {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-    }
-  });
-}, { immediate: true });
+watch(
+  () => messages.value.length,
+  () => {
+    nextTick(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    });
+  },
+  { immediate: true }
+);
 const requestId = ref("");
 // Removed unused isDragging variable
 const waitingForAnswer = ref(false);
@@ -80,7 +84,7 @@ const selectTopic = async (topic: string) => {
   // Show loading message
   const loadingMessage: Message = {
     id: "loading",
-    text: `Gute Wahl! Ich erstelle eine Übungsaufgabe zum Thema "${topic}"...`,
+    text: `Gute Wahl! Ich erstelle eine Übungsaufgabe zum Thema "${topic}". Das kann einen Moment dauern...`,
     sent: false,
     timestamp: new Date(),
   };
@@ -88,13 +92,16 @@ const selectTopic = async (topic: string) => {
 
   try {
     // Call the backend API to generate the story
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/generate-story`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ topic }),
-    });
+    const response = await fetch(
+      `${import.meta.env.VITE_API_BASE_URL}/api/generate-story`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ topic }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error("Failed to generate story");
@@ -109,7 +116,7 @@ const selectTopic = async (topic: string) => {
     // Add success message with actions
     const successMessage: Message = {
       id: `story-${storyData.requestId}`,
-      text: `Ich habe eine Geschichte zum Thema "${topic}" erstellt. Höre dir die Geschichte an und antworte auf die Fragen.`,
+      text: `Ich habe eine Geschichte zum Thema "${topic}" erstellt. Höre dir die Geschichte an und beantworte dann die Fragen.`,
       sent: false,
       timestamp: new Date(),
       type: "story",
@@ -198,7 +205,7 @@ const sendMessage = async () => {
       setTimeout(async () => {
         messages.value.push({
           id: `complete-${Date.now()}`,
-          text: "Vielen Dank für deine Antworten! Ich werde nun deine Antworten auswerten.",
+          text: "Vielen Dank für deine Antworten! Ich werde deine Antworten jetzt auswerten. Das kann einen Moment dauern...",
           sent: false,
           timestamp: new Date(),
         });
@@ -235,7 +242,6 @@ const sendMessage = async () => {
           }
 
           const evaluation = await response.json();
-          console.log("Evaluation results:", evaluation);
 
           // Add evaluation results to chat
           messages.value.push({
@@ -334,7 +340,6 @@ const showQuestions = (storyData: StoryData) => {
     type: "question",
   };
 
-  console.log("Adding question message:", questionMessage);
   messages.value.push(questionMessage);
 
   // Auto-scroll is handled by the watcher
