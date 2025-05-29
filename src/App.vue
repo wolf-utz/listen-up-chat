@@ -20,11 +20,11 @@ interface StoryData {
 }
 
 interface Message {
-  id: number | string;
+  id: string | number;
   text: string;
   sent: boolean;
   timestamp: Date;
-  type?: "text" | "story" | "question" | "evaluation" | "feedback" | "error";
+  type?: "text" | "story" | "question" | "evaluation" | "feedback" | "error" | "answer-type-selection" | "restart";
   data?: any;
 }
 
@@ -54,7 +54,7 @@ const topics = [
 const newMessage = ref("");
 const loading = ref(false);
 const selectedTopic = ref("");
-const answerType = ref<"multiple" | "text" | "">("");
+const answerType = ref<"text" | "multiple">("text");
 const showAnswerTypeSelection = ref(false);
 
 // Question state
@@ -65,6 +65,9 @@ const answeredQuestions = ref<{ [key: number]: boolean }>({});
 const waitingForAnswer = ref(false);
 const questionsStarted = ref(false);
 const currentStory = ref<StoryData | null>(null);
+// Counters for tracking progress (currently unused)
+// const count = ref<number>(0);
+// const total = ref<number>(0);
 
 const chatContainer = ref<HTMLElement | null>(null);
 
@@ -82,20 +85,38 @@ const showCurrentQuestion = () => {
   let choices: Choice[] = [];
 
   try {
-    // Check if question is a string that contains JSON
-    if (typeof question === "string" || question instanceof String) {
-      const parsedQuestion = JSON.parse(question as string);
-      questionText = parsedQuestion.question || "";
-      choices = parsedQuestion.choices || [];
-    } else if (typeof question === "object" && question !== null) {
-      // Handle case where question is already an object
-      questionText = question.question || "";
-      choices = question.choices || [];
+    // If question is already in the correct format
+    if (question && typeof question === 'object' && 'question' in question) {
+      questionText = String(question.question || '');
+      choices = Array.isArray(question.choices) ? question.choices : [];
+    } 
+    // If question is a string that might contain JSON
+    else if (typeof question === 'string') {
+      try {
+        const parsed = JSON.parse(question);
+        if (parsed && typeof parsed === 'object') {
+          // Handle case where the string is a question object
+          if ('question' in parsed) {
+            questionText = String(parsed.question || '');
+            choices = Array.isArray(parsed.choices) ? parsed.choices : [];
+          } 
+          // Handle case where the string is a full question set
+          else if (Array.isArray(parsed.questions)) {
+            currentQuestions.value = parsed.questions.map((q: any) => ({
+              question: String(q.question || ''),
+              choices: Array.isArray(q.choices) ? q.choices : [],
+            }));
+            return; // Exit early since we've updated the questions
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing question JSON:', e);
+        questionText = 'Error: Could not parse question';
+      }
     }
   } catch (e) {
-    console.error("Error parsing question:", e);
-    questionText = "Error: Could not load question";
-    choices = [];
+    console.error('Error processing question:', e);
+    questionText = 'Error: Could not load question';
   }
 
   // Add question to chat
@@ -155,7 +176,7 @@ const selectTopic = async (topic: string) => {
   });
 };
 
-const selectAnswerType = async (type: "multiple" | "text") => {
+const selectAnswerType = async (type: "text" | "multiple") => {
   answerType.value = type;
   showAnswerTypeSelection.value = false;
 
@@ -240,14 +261,8 @@ const selectAnswerType = async (type: "multiple" | "text") => {
   });
 };
 
-const submitAnswer = async () => {
-  if (answerType.value === "multiple") {
-    await submitMultipleChoiceAnswer();
-  } else {
-    await submitTextAnswer();
-  }
-};
-
+// Unused function - keeping for reference
+/*
 const submitMultipleChoiceAnswer = async () => {
   const questionIndex = currentQuestionIndex.value;
   const selectedChoiceIndex = selectedChoices.value[questionIndex];
@@ -279,8 +294,9 @@ const submitMultipleChoiceAnswer = async () => {
   messages.value.push(feedbackMessage);
 
   // Move to next question or finish
-  await moveToNextQuestion(selectedChoice.isCorrect);
+  goToNextQuestion();
 };
+*/
 
 const submitTextAnswer = async (answerText?: string) => {
   const answer = answerText || newMessage.value.trim();
@@ -310,8 +326,8 @@ const submitTextAnswer = async (answerText?: string) => {
     timestamp: new Date(),
   });
 
-  // Move to next question
-  await moveToNextQuestion(true);
+  // Move to next question with isTextAnswer flag
+  goToNextQuestion(true);
 
   // If all questions are answered, evaluate them
   if (currentQuestionIndex.value >= currentQuestions.value.length) {
@@ -319,14 +335,13 @@ const submitTextAnswer = async (answerText?: string) => {
   }
 };
 
-const goToNextQuestion = () => {
+const goToNextQuestion = (isTextAnswer: boolean = false) => {
   const currentIndex = currentQuestionIndex.value;
 
-  // Add user's answer to chat
-  if (selectedChoices.value[currentIndex] !== null) {
+  // Only process answer if this is a multiple choice question
+  if (!isTextAnswer && selectedChoices.value[currentIndex] !== null) {
     const question = currentQuestions.value[currentIndex];
-    const selectedChoice =
-      question.choices[selectedChoices.value[currentIndex]!];
+    const selectedChoice = question.choices[selectedChoices.value[currentIndex]!];
 
     // Mark this question as answered
     answeredQuestions.value = {
@@ -334,49 +349,19 @@ const goToNextQuestion = () => {
       [currentIndex]: true,
     };
 
-    messages.value.push({
-      id: `answer-${Date.now()}`,
-      text: selectedChoice.text,
-      sent: true,
-      timestamp: new Date(),
-    });
-
-    // Move to next question or finish
-    currentQuestionIndex.value++;
-
-    if (currentQuestionIndex.value < currentQuestions.value.length) {
-      // Show next question
-      showCurrentQuestion();
-      waitingForAnswer.value = true;
-    } else {
-      // All questions answered
-      const correctCount = Object.values(selectedChoices.value).reduce(
-        (count, choiceIndex, index) => {
-          if (choiceIndex === null) return count;
-          return (
-            count +
-            (currentQuestions.value[index].choices[choiceIndex].isCorrect
-              ? 1
-              : 0)
-          );
-        },
-        0
-      );
-
-      const completionMessage: Message = {
-        id: `completion-${Date.now()}`,
-        text: `Glückwunsch! Du hast alle Fragen beantwortet. Du hast ${correctCount} von ${currentQuestions.value.length} Fragen richtig beantwortet.`,
-        sent: false,
+    // For text answers, we've already added the message in submitTextAnswer
+    if (!isTextAnswer) {
+      messages.value.push({
+        id: `answer-${Date.now()}`,
+        text: selectedChoice.text,
+        sent: true,
         timestamp: new Date(),
-      };
-      messages.value.push(completionMessage);
-      questionsStarted.value = false;
+      });
     }
   }
-};
 
-const moveToNextQuestion = async (wasCorrect: boolean) => {
-  // Move to next question
+
+  // Move to next question or finish
   currentQuestionIndex.value++;
 
   if (currentQuestionIndex.value < currentQuestions.value.length) {
@@ -385,38 +370,26 @@ const moveToNextQuestion = async (wasCorrect: boolean) => {
     waitingForAnswer.value = true;
   } else {
     // All questions answered
-    if (answerType.value === "multiple") {
-      // For multiple choice, calculate score based on correct answers
-      const correctCount = Object.values(selectedChoices.value).reduce(
-        (count, choiceIndex, index) => {
-          if (choiceIndex === null) return count;
-          return (
-            count +
-            (currentQuestions.value[index].choices[choiceIndex].isCorrect
-              ? 1
-              : 0)
-          );
-        },
-        0
-      );
+    const correctCount = Object.values(selectedChoices.value).reduce<number>(
+      (acc, choiceIndex, index) => {
+        if (choiceIndex === null) return acc;
+        return (
+          acc +
+          (currentQuestions.value[index].choices[choiceIndex]?.isCorrect
+            ? 1
+            : 0)
+        );
+      },
+      0
+    );
 
-      const completionMessage: Message = {
-        id: `completion-${Date.now()}`,
-        text: `Glückwunsch! Du hast alle Fragen beantwortet. Du hast ${correctCount} von ${currentQuestions.value.length} Fragen richtig beantwortet.`,
-        sent: false,
-        timestamp: new Date(),
-      };
-      messages.value.push(completionMessage);
-    } else {
-      // For Freitext, just show completion message
-      const completionMessage: Message = {
-        id: `completion-${Date.now()}`,
-        text: "Vielen Dank für deine Antworten! Ich werde deine Antworten jetzt auswerten.",
-        sent: false,
-        timestamp: new Date(),
-      };
-      messages.value.push(completionMessage);
-    }
+    const completionMessage: Message = {
+      id: `completion-${Date.now()}`,
+      text: `Glückwunsch! Du hast alle Fragen beantwortet. Du hast ${correctCount} von ${currentQuestions.value.length} Fragen richtig beantwortet.`,
+      sent: false,
+      timestamp: new Date(),
+    };
+    messages.value.push(completionMessage);
     questionsStarted.value = false;
   }
 
@@ -462,7 +435,7 @@ const evaluateAnswers = async () => {
       const score = Math.round((correctAnswers / totalQuestions) * 100);
 
       // Add evaluation results to chat
-      const evaluationMessage = {
+      const evaluationMessage: Message = {
         id: `evaluation-${Date.now()}`,
         text: `Auswertung: ${score}% korrekt (${correctAnswers} von ${totalQuestions} Fragen richtig beantwortet)`,
         sent: false,
@@ -471,7 +444,7 @@ const evaluateAnswers = async () => {
       };
 
       // Add detailed feedback for incorrect answers
-      const feedbackMessages = [];
+      const feedbackMessages: Message[] = [];
       questionsWithAnswers.forEach((item, index) => {
         const question = currentQuestions.value[index];
         const selectedChoiceIndex = selectedChoices.value[index];
@@ -670,7 +643,7 @@ const sendMessage = async () => {
         });
 
         // Move to next question or finish
-        moveToNextQuestion(selectedChoice.isCorrect);
+        goToNextQuestion();
 
         // If all questions are answered, evaluate them
         if (allQuestionsAnswered()) {
@@ -726,24 +699,25 @@ const showQuestions = (storyData: StoryData) => {
   currentStory.value = storyData;
 
   // Process questions - they might be strings or objects
-  currentQuestions.value = storyData.questions.map((q, i) => {
+  currentQuestions.value = storyData.questions.map((q: any, i: number) => {
     // If it's already an object with question and choices
     if (q && typeof q === "object" && "question" in q) {
       return {
         id: i,
-        question: q.question || "",
-        choices: q.choices || [],
+        question: String(q.question || ""),
+        choices: Array.isArray(q.choices) ? q.choices : [],
       };
     }
 
     // If it's a string that starts with {, try to parse as JSON
-    if (typeof q === "string" && q.trim().startsWith("{")) {
+    const str = String(q);
+    if (str.trim().startsWith("{")) {
       try {
-        const parsed = JSON.parse(q);
+        const parsed = JSON.parse(str);
         return {
           id: i,
-          question: parsed.question || "",
-          choices: parsed.choices || [],
+          question: String(parsed.question || ""),
+          choices: Array.isArray(parsed.choices) ? parsed.choices : [],
         };
       } catch (e) {
         console.error("Error parsing question as JSON:", e);
@@ -900,11 +874,11 @@ const showQuestions = (storyData: StoryData) => {
         v-model="newMessage"
         @keydown.enter.exact.prevent="handleKeyPress"
         placeholder="Schreibe deine Nachricht..."
-        :disabled="loading || !selectedTopic || answerType === 'multiple'"
+        :disabled="loading || !selectedTopic || answerType !== 'text'"
       ></textarea>
       <button
         @click="sendMessage"
-        :disabled="!newMessage.trim() || loading || answerType === 'multiple'"
+        :disabled="!newMessage.trim() || loading || answerType !== 'text'"
       >
         Senden
       </button>
