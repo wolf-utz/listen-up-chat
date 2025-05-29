@@ -2,6 +2,23 @@
 import { ref, nextTick, watch } from "vue";
 import AudioPlayer from "./components/AudioPlayer.vue";
 
+interface Choice {
+  text: string;
+  isCorrect: boolean;
+}
+
+interface Question {
+  question: string;
+  choices: Choice[];
+}
+
+interface StoryData {
+  requestId: string;
+  story: string;
+  questions: Question[];
+  audioUrl: string;
+}
+
 interface Message {
   id: number | string;
   text: string;
@@ -9,13 +26,6 @@ interface Message {
   timestamp: Date;
   type?: "text" | "story" | "question" | "evaluation" | "feedback" | "error";
   data?: any;
-}
-
-interface StoryData {
-  requestId: string;
-  story: string;
-  questions: string[];
-  audioUrl: string;
 }
 
 // Initialize messages with welcome message
@@ -44,12 +54,66 @@ const topics = [
 const newMessage = ref("");
 const loading = ref(false);
 const selectedTopic = ref("");
+const answerType = ref<"multiple" | "text" | "">("");
+const showAnswerTypeSelection = ref(false);
 
 // Question state
 const currentQuestionIndex = ref(-1);
-const userAnswers = ref<Record<number, string>>({});
-const currentQuestions = ref<Array<{ text: string; id: number }>>([]);
+const currentQuestions = ref<Question[]>([]);
+const selectedChoices = ref<{ [key: number]: number | null }>({});
+const answeredQuestions = ref<{ [key: number]: boolean }>({});
+const waitingForAnswer = ref(false);
+const questionsStarted = ref(false);
+const currentStory = ref<StoryData | null>(null);
+
 const chatContainer = ref<HTMLElement | null>(null);
+
+const showCurrentQuestion = () => {
+  if (
+    currentQuestionIndex.value < 0 ||
+    currentQuestionIndex.value >= currentQuestions.value.length
+  )
+    return;
+
+  const question = currentQuestions.value[currentQuestionIndex.value];
+
+  // Parse the question if it's a string (might be JSON)
+  let questionText = "";
+  let choices: Choice[] = [];
+
+  try {
+    // Check if question is a string that contains JSON
+    if (typeof question === "string" || question instanceof String) {
+      const parsedQuestion = JSON.parse(question as string);
+      questionText = parsedQuestion.question || "";
+      choices = parsedQuestion.choices || [];
+    } else if (typeof question === "object" && question !== null) {
+      // Handle case where question is already an object
+      questionText = question.question || "";
+      choices = question.choices || [];
+    }
+  } catch (e) {
+    console.error("Error parsing question:", e);
+    questionText = "Error: Could not load question";
+    choices = [];
+  }
+
+  // Add question to chat
+  messages.value.push({
+    id: `question-${Date.now()}`,
+    text: questionText,
+    sent: false,
+    timestamp: new Date(),
+    type: "question",
+    data: {
+      questionIndex: currentQuestionIndex.value,
+      choices: choices,
+    },
+  });
+
+  // Set waiting for answer
+  waitingForAnswer.value = true;
+};
 
 // Auto-scroll to bottom when messages change
 watch(
@@ -63,11 +127,8 @@ watch(
   },
   { immediate: true }
 );
+
 const requestId = ref("");
-// Removed unused isDragging variable
-const waitingForAnswer = ref(false);
-const questionsStarted = ref(false);
-const currentStory = ref<StoryData | null>(null);
 
 const selectTopic = async (topic: string) => {
   if (selectedTopic.value) return;
@@ -81,17 +142,46 @@ const selectTopic = async (topic: string) => {
   };
   messages.value.push(message);
 
+  // Ask for answer type
+  showAnswerTypeSelection.value = true;
+  const answerTypeMessageId = `answer-type-${Date.now()}`;
+  messages.value.push({
+    id: answerTypeMessageId,
+    text: "Möchtest du Multiple-Choice-Fragen oder Freitext-Antworten?",
+    sent: false,
+    timestamp: new Date(),
+    type: "answer-type-selection",
+    data: { id: answerTypeMessageId },
+  });
+};
+
+const selectAnswerType = async (type: "multiple" | "text") => {
+  answerType.value = type;
+  showAnswerTypeSelection.value = false;
+
+  // Add user's choice to chat
+  messages.value.push({
+    id: `answer-type-selection-${Date.now()}`,
+    text: type === "multiple" ? "Multiple Choice" : "Freitext",
+    sent: true,
+    timestamp: new Date(),
+  });
+
   // Show loading message
   const loadingMessage: Message = {
     id: "loading",
-    text: `Gute Wahl! Ich erstelle eine Übungsaufgabe zum Thema "${topic}". Das kann einen Moment dauern...`,
+    text: `Gute Wahl! Ich erstelle eine Übungsaufgabe zum Thema "${
+      selectedTopic.value
+    }" mit ${
+      type === "multiple" ? "Multiple-Choice-Fragen" : "Freitext-Antworten"
+    }. Das kann einen Moment dauern...`,
     sent: false,
     timestamp: new Date(),
   };
   messages.value.push(loadingMessage);
 
   try {
-    // Call the backend API to generate the story
+    // Call the backend API to generate the story with the selected answer type
     const response = await fetch(
       `${import.meta.env.VITE_API_BASE_URL}/api/generate-story`,
       {
@@ -99,7 +189,10 @@ const selectTopic = async (topic: string) => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ topic }),
+        body: JSON.stringify({
+          topic: selectedTopic.value,
+          answerType: type,
+        }),
       }
     );
 
@@ -116,7 +209,7 @@ const selectTopic = async (topic: string) => {
     // Add success message with actions
     const successMessage: Message = {
       id: `story-${storyData.requestId}`,
-      text: `Ich habe eine Geschichte zum Thema "${topic}" erstellt. Höre dir die Geschichte an und beantworte dann die Fragen.`,
+      text: `Ich habe eine Geschichte zum Thema "${selectedTopic.value}" erstellt. Höre dir die Geschichte an und beantworte dann die Fragen.`,
       sent: false,
       timestamp: new Date(),
       type: "story",
@@ -139,10 +232,394 @@ const selectTopic = async (topic: string) => {
   }
 
   // Auto-scroll to bottom
-  const chatContainer = document.querySelector(".chat-container");
-  if (chatContainer) {
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+  nextTick(() => {
+    const chatContainer = document.querySelector(".chat-container");
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  });
+};
+
+const submitAnswer = async () => {
+  if (answerType.value === "multiple") {
+    await submitMultipleChoiceAnswer();
+  } else {
+    await submitTextAnswer();
   }
+};
+
+const submitMultipleChoiceAnswer = async () => {
+  const questionIndex = currentQuestionIndex.value;
+  const selectedChoiceIndex = selectedChoices.value[questionIndex];
+
+  if (selectedChoiceIndex === null || selectedChoiceIndex === undefined) return;
+
+  const question = currentQuestions.value[questionIndex];
+  const selectedChoice = question.choices[selectedChoiceIndex];
+
+  // Add user's answer to chat
+  messages.value.push({
+    id: `${Date.now()}-answer`,
+    text: selectedChoice.text,
+    sent: true,
+    timestamp: new Date(),
+  });
+
+  // Show feedback immediately for multiple choice
+  const feedbackMessage: Message = {
+    id: `feedback-${Date.now()}`,
+    text: selectedChoice.isCorrect
+      ? "Richtig! "
+      : `Leider falsch. Die richtige Antwort wäre: ${
+          question.choices.find((c) => c.isCorrect)?.text
+        }`,
+    sent: false,
+    timestamp: new Date(),
+  };
+  messages.value.push(feedbackMessage);
+
+  // Move to next question or finish
+  await moveToNextQuestion(selectedChoice.isCorrect);
+};
+
+const submitTextAnswer = async (answerText?: string) => {
+  const answer = answerText || newMessage.value.trim();
+  if (!answer) return;
+
+  newMessage.value = "";
+  waitingForAnswer.value = false;
+
+  // Mark current question as answered
+  const currentIndex = currentQuestionIndex.value;
+  answeredQuestions.value = {
+    ...answeredQuestions.value,
+    [currentIndex]: true,
+  };
+
+  // Store the answer
+  selectedChoices.value = {
+    ...selectedChoices.value,
+    [currentIndex]: 0, // For text answers, we just need to mark it as answered
+  };
+
+  // Add user's answer to chat
+  messages.value.push({
+    id: `${Date.now()}-answer`,
+    text: answer,
+    sent: true,
+    timestamp: new Date(),
+  });
+
+  // Move to next question
+  await moveToNextQuestion(true);
+
+  // If all questions are answered, evaluate them
+  if (currentQuestionIndex.value >= currentQuestions.value.length) {
+    await evaluateAnswers();
+  }
+};
+
+const goToNextQuestion = () => {
+  const currentIndex = currentQuestionIndex.value;
+
+  // Add user's answer to chat
+  if (selectedChoices.value[currentIndex] !== null) {
+    const question = currentQuestions.value[currentIndex];
+    const selectedChoice =
+      question.choices[selectedChoices.value[currentIndex]!];
+
+    // Mark this question as answered
+    answeredQuestions.value = {
+      ...answeredQuestions.value,
+      [currentIndex]: true,
+    };
+
+    messages.value.push({
+      id: `answer-${Date.now()}`,
+      text: selectedChoice.text,
+      sent: true,
+      timestamp: new Date(),
+    });
+
+    // Move to next question or finish
+    currentQuestionIndex.value++;
+
+    if (currentQuestionIndex.value < currentQuestions.value.length) {
+      // Show next question
+      showCurrentQuestion();
+      waitingForAnswer.value = true;
+    } else {
+      // All questions answered
+      const correctCount = Object.values(selectedChoices.value).reduce(
+        (count, choiceIndex, index) => {
+          if (choiceIndex === null) return count;
+          return (
+            count +
+            (currentQuestions.value[index].choices[choiceIndex].isCorrect
+              ? 1
+              : 0)
+          );
+        },
+        0
+      );
+
+      const completionMessage: Message = {
+        id: `completion-${Date.now()}`,
+        text: `Glückwunsch! Du hast alle Fragen beantwortet. Du hast ${correctCount} von ${currentQuestions.value.length} Fragen richtig beantwortet.`,
+        sent: false,
+        timestamp: new Date(),
+      };
+      messages.value.push(completionMessage);
+      questionsStarted.value = false;
+    }
+  }
+};
+
+const moveToNextQuestion = async (wasCorrect: boolean) => {
+  // Move to next question
+  currentQuestionIndex.value++;
+
+  if (currentQuestionIndex.value < currentQuestions.value.length) {
+    // Show next question
+    showCurrentQuestion();
+    waitingForAnswer.value = true;
+  } else {
+    // All questions answered
+    if (answerType.value === "multiple") {
+      // For multiple choice, calculate score based on correct answers
+      const correctCount = Object.values(selectedChoices.value).reduce(
+        (count, choiceIndex, index) => {
+          if (choiceIndex === null) return count;
+          return (
+            count +
+            (currentQuestions.value[index].choices[choiceIndex].isCorrect
+              ? 1
+              : 0)
+          );
+        },
+        0
+      );
+
+      const completionMessage: Message = {
+        id: `completion-${Date.now()}`,
+        text: `Glückwunsch! Du hast alle Fragen beantwortet. Du hast ${correctCount} von ${currentQuestions.value.length} Fragen richtig beantwortet.`,
+        sent: false,
+        timestamp: new Date(),
+      };
+      messages.value.push(completionMessage);
+    } else {
+      // For Freitext, just show completion message
+      const completionMessage: Message = {
+        id: `completion-${Date.now()}`,
+        text: "Vielen Dank für deine Antworten! Ich werde deine Antworten jetzt auswerten.",
+        sent: false,
+        timestamp: new Date(),
+      };
+      messages.value.push(completionMessage);
+    }
+    questionsStarted.value = false;
+  }
+
+  // Scroll to bottom
+  nextTick(() => {
+    const container = document.querySelector(".chat-container");
+    if (container) container.scrollTop = container.scrollHeight;
+  });
+};
+
+const evaluateAnswers = async () => {
+  // Add completion message
+  messages.value.push({
+    id: `complete-${Date.now()}`,
+    text: "Vielen Dank für deine Antworten! Ich werde deine Antworten jetzt auswerten. Das kann einen Moment dauern...",
+    sent: false,
+    timestamp: new Date(),
+  });
+
+  // Send answers to the backend for evaluation
+  loading.value = true;
+
+  try {
+    if (answerType.value === "multiple") {
+      // Handle multiple choice evaluation
+      const questionsWithAnswers = currentQuestions.value.map((q, index) => ({
+        question: q.question,
+        answer:
+          selectedChoices.value[index] !== null
+            ? q.choices[selectedChoices.value[index]!].text
+            : "",
+        isCorrect:
+          selectedChoices.value[index] !== null
+            ? q.choices[selectedChoices.value[index]!].isCorrect
+            : false,
+      }));
+
+      // Calculate score for multiple choice
+      const correctAnswers = questionsWithAnswers.filter(
+        (q) => q.isCorrect
+      ).length;
+      const totalQuestions = questionsWithAnswers.length;
+      const score = Math.round((correctAnswers / totalQuestions) * 100);
+
+      // Add evaluation results to chat
+      const evaluationMessage = {
+        id: `evaluation-${Date.now()}`,
+        text: `Auswertung: ${score}% korrekt (${correctAnswers} von ${totalQuestions} Fragen richtig beantwortet)`,
+        sent: false,
+        timestamp: new Date(),
+        type: "evaluation",
+      };
+
+      // Add detailed feedback for incorrect answers
+      const feedbackMessages = [];
+      questionsWithAnswers.forEach((item, index) => {
+        const question = currentQuestions.value[index];
+        const selectedChoiceIndex = selectedChoices.value[index];
+        const selectedChoice =
+          selectedChoiceIndex !== null
+            ? question.choices[selectedChoiceIndex]
+            : null;
+        const correctChoice = question.choices.find(
+          (choice) => choice.isCorrect
+        );
+
+        if (!item.isCorrect && selectedChoice && correctChoice) {
+          feedbackMessages.push({
+            id: `feedback-${Date.now()}-${index}`,
+            text: `Frage: ${question.question}<br>Deine Antwort: ${selectedChoice.text}<br>Richtige Antwort: ${correctChoice.text}`,
+            sent: false,
+            timestamp: new Date(),
+          });
+        }
+      });
+
+      // Add completion message
+      const completionMessage = {
+        id: `completion-${Date.now()}`,
+        text: `Glückwunsch! Du hast alle Fragen beantwortet.`,
+        sent: false,
+        timestamp: new Date(),
+      };
+
+      // Add all messages at once to prevent race conditions
+      messages.value.push(evaluationMessage);
+      if (feedbackMessages.length > 0) {
+        messages.value.push(...feedbackMessages);
+      }
+
+      messages.value.push(completionMessage);
+    } else {
+      // Handle Freitext evaluation - send to API
+      const userAnswers = currentQuestions.value.map((question) => {
+        const answer = messages.value
+          .filter((msg) => msg.sent)
+          .find(
+            (msg) =>
+              msg.text &&
+              msg.text.trim() &&
+              messages.value.indexOf(msg) >
+                messages.value.findIndex((m) => m.text === question.question)
+          );
+        return answer?.text || "";
+      });
+
+      // Prepare the request body with question-answer pairs
+      const questionsWithAnswers = currentQuestions.value.map(
+        (question, index) => ({
+          question: question.question,
+          answer: userAnswers[index] || "",
+        })
+      );
+
+      const requestBody = {
+        story: currentStory.value?.story || "",
+        questions: questionsWithAnswers,
+      };
+
+      // Send to API for evaluation
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/evaluate-answers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to evaluate answers");
+      }
+
+      const result = await response.json();
+
+      // Show evaluation results
+      if (result.feedback) {
+        // Add the overall feedback
+        messages.value.push({
+          id: `evaluation-${Date.now()}`,
+          text: `Auswertung: ${result.overallScore}% korrekt\n${result.feedback}`,
+          sent: false,
+          timestamp: new Date(),
+        });
+
+        // Add detailed feedback for each question
+        if (Array.isArray(result.evaluations)) {
+          result.evaluations.forEach((evaluation: any, index: number) => {
+            const messageText = [
+              `Frage: ${evaluation.question}`,
+              `Deine Antwort: ${evaluation.answer}`,
+              "", // Empty line for spacing
+              evaluation.isCorrect
+                ? "✅ Richtig!"
+                : `❌ Falsch. ${evaluation.correction}`,
+              "", // Empty line for spacing
+              evaluation.explanation,
+            ].join("<br>");
+
+            messages.value.push({
+              id: `answer-${Date.now()}-${index}`,
+              text: messageText,
+              sent: false,
+              timestamp: new Date(),
+            });
+          });
+        }
+      }
+    }
+
+    // Add restart button
+    messages.value.push({
+      id: `restart-${Date.now()}`,
+      text: "Möchtest du es noch einmal versuchen?",
+      sent: false,
+      timestamp: new Date(),
+      type: "restart",
+    });
+  } catch (error) {
+    console.error("Error evaluating answers:", error);
+    messages.value.push({
+      id: `error-${Date.now()}`,
+      text: "Entschuldigung, es gab ein Problem bei der Auswertung. Bitte versuche es später noch einmal.",
+      sent: false,
+      timestamp: new Date(),
+    });
+  } finally {
+    loading.value = false;
+    questionsStarted.value = false;
+  }
+};
+
+const restartQuiz = () => {
+  window.location.reload();
+};
+
+const allQuestionsAnswered = () => {
+  return Object.values(selectedChoices.value).every(
+    (choice) => choice !== null
+  );
 };
 
 const sendMessage = async () => {
@@ -166,121 +643,40 @@ const sendMessage = async () => {
 
   // If we're in question-answering mode
   if (waitingForAnswer.value && currentQuestionIndex.value >= 0) {
-    const questionId = currentQuestions.value[currentQuestionIndex.value].id;
-    userAnswers.value[questionId] = newMessage.value;
+    // Handle text answer in Freitext mode
+    if (answerType.value === "text") {
+      const answer = newMessage.value.trim();
+      if (answer) {
+        // Submit the text answer with the answer text
+        await submitTextAnswer(answer);
+      }
+    }
+    // Handle multiple choice answer
+    else {
+      const currentQuestion =
+        currentQuestions.value[currentQuestionIndex.value];
+      const selectedChoice = currentQuestion.choices.find(
+        (_, index) =>
+          selectedChoices.value[currentQuestionIndex.value] === index
+      );
 
-    // Add user's answer to chat
-    messages.value.push({
-      id: `answer-${Date.now()}`,
-      text: newMessage.value,
-      sent: true,
-      timestamp: new Date(),
-    });
-
-    // Move to next question or finish
-    if (currentQuestionIndex.value < currentQuestions.value.length - 1) {
-      currentQuestionIndex.value++;
-
-      // Add next question
-      setTimeout(() => {
+      if (selectedChoice) {
+        // Add user's answer to chat
         messages.value.push({
-          id: `question-${Date.now()}`,
-          text: currentQuestions.value[currentQuestionIndex.value].text,
-          sent: false,
-          timestamp: new Date(),
-          type: "question",
-        });
-
-        // Scroll to bottom
-        nextTick(() => {
-          const container = document.querySelector(".chat-container");
-          if (container) container.scrollTop = container.scrollHeight;
-        });
-      }, 500);
-    } else {
-      // All questions answered
-      waitingForAnswer.value = false;
-
-      // Add completion message and evaluate answers
-      setTimeout(async () => {
-        messages.value.push({
-          id: `complete-${Date.now()}`,
-          text: "Vielen Dank für deine Antworten! Ich werde deine Antworten jetzt auswerten. Das kann einen Moment dauern...",
-          sent: false,
+          id: `answer-${Date.now()}`,
+          text: selectedChoice.text,
+          sent: true,
           timestamp: new Date(),
         });
 
-        // Send answers to the backend for evaluation
-        loading.value = true;
+        // Move to next question or finish
+        moveToNextQuestion(selectedChoice.isCorrect);
 
-        try {
-          // Prepare the questions and answers in the required format
-          const questionsWithAnswers = currentQuestions.value.map(
-            (q, index) => ({
-              question: q.text,
-              answer: userAnswers.value[index] || "",
-            })
-          );
-
-          // Call the evaluation endpoint
-          const response = await fetch(
-            `${import.meta.env.VITE_API_BASE_URL}/api/evaluate-answers`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                story: currentStory.value?.story || "",
-                questions: questionsWithAnswers,
-              }),
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error("Failed to evaluate answers");
-          }
-
-          const evaluation = await response.json();
-
-          // Add evaluation results to chat
-          messages.value.push({
-            id: `evaluation-${Date.now()}`,
-            text: `Auswertung: ${evaluation.overallScore}% korrekt\n${evaluation.feedback}`,
-            sent: false,
-            timestamp: new Date(),
-            type: "evaluation",
-          });
-
-          // Add detailed feedback for each question
-          evaluation.evaluations.forEach((item: any) => {
-            if (!item.isCorrect) {
-              messages.value.push({
-                id: `feedback-${Date.now()}-${item.question.substring(0, 10)}`,
-                text: `Frage: ${item.question}\nDeine Antwort: ${
-                  item.answer
-                }\nKorrektur: ${
-                  item.correction || "Keine Korrektur nötig"
-                }\nErklärung: ${item.explanation}`,
-                sent: false,
-                timestamp: new Date(),
-                type: "feedback",
-              });
-            }
-          });
-        } catch (error) {
-          console.error("Error evaluating answers:", error);
-          messages.value.push({
-            id: `error-${Date.now()}`,
-            text: "Entschuldigung, bei der Auswertung ist ein Fehler aufgetreten. Bitte versuche es später noch einmal.",
-            sent: false,
-            timestamp: new Date(),
-            type: "error",
-          });
-        } finally {
-          loading.value = false;
+        // If all questions are answered, evaluate them
+        if (allQuestionsAnswered()) {
+          setTimeout(evaluateAnswers, 500);
         }
-      }, 500);
+      }
     }
   } else {
     // Normal chat message
@@ -303,24 +699,66 @@ const sendMessage = async () => {
   });
 };
 
-// Format time in MM:SS format
 // Handle keyboard shortcuts
 const handleKeyPress = (e: KeyboardEvent) => {
-  // Only handle if not in an input field
   const target = e.target as HTMLElement;
-  if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+
+  // Handle Enter key in textarea
+  if (target.tagName === "TEXTAREA" && e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (
+      answerType.value === "text" &&
+      questionsStarted.value &&
+      waitingForAnswer.value
+    ) {
+      submitTextAnswer();
+    } else {
+      sendMessage();
+    }
     return;
   }
+
   // Space key handling is now managed by the AudioPlayer component
 };
 
 const showQuestions = (storyData: StoryData) => {
   console.log("showQuestions called", { storyData });
   currentStory.value = storyData;
-  currentQuestions.value = storyData.questions.map((q, i) => ({
-    text: q,
-    id: i,
-  }));
+
+  // Process questions - they might be strings or objects
+  currentQuestions.value = storyData.questions.map((q, i) => {
+    // If it's already an object with question and choices
+    if (q && typeof q === "object" && "question" in q) {
+      return {
+        id: i,
+        question: q.question || "",
+        choices: q.choices || [],
+      };
+    }
+
+    // If it's a string that starts with {, try to parse as JSON
+    if (typeof q === "string" && q.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(q);
+        return {
+          id: i,
+          question: parsed.question || "",
+          choices: parsed.choices || [],
+        };
+      } catch (e) {
+        console.error("Error parsing question as JSON:", e);
+        // Fall through to plain text handling
+      }
+    }
+
+    // Handle as plain text question (for Freitext mode)
+    return {
+      id: i,
+      question: String(q),
+      choices: [],
+    };
+  });
+
   requestId.value = `req_${Date.now()}`;
   currentQuestionIndex.value = 0;
   waitingForAnswer.value = true;
@@ -328,19 +766,11 @@ const showQuestions = (storyData: StoryData) => {
 
   console.log("Questions set up", {
     questionCount: currentQuestions.value.length,
-    firstQuestion: currentQuestions.value[0]?.text,
+    firstQuestion: currentQuestions.value[0]?.question,
   });
 
-  // Add bot message with first question
-  const questionMessage: Message = {
-    id: `question-${Date.now()}`,
-    text: currentQuestions.value[0]?.text || "No question available",
-    sent: false,
-    timestamp: new Date(),
-    type: "question",
-  };
-
-  messages.value.push(questionMessage);
+  // Show the first question
+  showCurrentQuestion();
 
   // Auto-scroll is handled by the watcher
 };
@@ -356,19 +786,39 @@ const showQuestions = (storyData: StoryData) => {
       >
         <div class="message-content">
           <template v-if="message.id === 1">
-            {{ message.text }}
-            <div class="topic-selection">
+            <div>
+              {{ message.text }}
+            </div>
+            <div v-if="!showAnswerTypeSelection" class="topics-container">
               <button
                 v-for="(topic, index) in topics"
                 :key="index"
                 @click="selectTopic(topic)"
-                :class="[
-                  'topic-button',
-                  { 'topic-button--selected': selectedTopic === topic },
-                ]"
+                class="topic-button"
                 :disabled="!!selectedTopic"
               >
                 {{ topic }}
+              </button>
+            </div>
+          </template>
+          <template v-else-if="message.type === 'answer-type-selection'">
+            <div>
+              {{ message.text }}
+            </div>
+            <div class="answer-type-container">
+              <button
+                @click="selectAnswerType('multiple')"
+                class="answer-type-button"
+              >
+                <span>Multiple Choice</span>
+                <small>Wähle aus vorgegebenen Antworten</small>
+              </button>
+              <button
+                @click="selectAnswerType('text')"
+                class="answer-type-button"
+              >
+                <span>Freitext</span>
+                <small>Schreibe deine eigene Antwort</small>
               </button>
             </div>
           </template>
@@ -384,8 +834,52 @@ const showQuestions = (storyData: StoryData) => {
               </button>
             </div>
           </template>
+          <template
+            v-else-if="message.type === 'question' && message.data?.choices"
+          >
+            <div class="question-text">{{ message.text }}</div>
+            <div class="choices-container">
+              <ul class="choices-list">
+                <li
+                  v-for="(choice, index) in message.data.choices"
+                  :key="index"
+                  class="choice-item"
+                >
+                  <label class="choice-option">
+                    <input
+                      type="radio"
+                      :name="'question-' + message.data.questionIndex"
+                      :value="index"
+                      v-model="selectedChoices[message.data.questionIndex]"
+                      :disabled="answeredQuestions[message.data.questionIndex]"
+                      class="choice-radio"
+                    />
+                    <span class="choice-text">{{ choice.text }}</span>
+                  </label>
+                </li>
+              </ul>
+              <div v-if="answerType === 'multiple'" class="question-actions">
+                <button
+                  @click="goToNextQuestion()"
+                  :disabled="
+                    selectedChoices[message.data.questionIndex] === null ||
+                    answeredQuestions[message.data.questionIndex]
+                  "
+                  class="next-question-button"
+                >
+                  Nächste Frage
+                </button>
+              </div>
+            </div>
+          </template>
+          <template v-else-if="message.type === 'restart'">
+            <div>{{ message.text }}</div>
+            <button @click="restartQuiz" class="restart-button">
+              Neu starten
+            </button>
+          </template>
           <template v-else>
-            {{ message.text }}
+            <div v-html="message.text"></div>
           </template>
         </div>
         <div class="message-time">
@@ -398,26 +892,21 @@ const showQuestions = (storyData: StoryData) => {
         </div>
       </div>
     </div>
-    <div class="input-container">
+    <div
+      class="input-container"
+      v-if="questionsStarted && answerType === 'text' && waitingForAnswer"
+    >
       <textarea
         v-model="newMessage"
-        @keydown.enter="handleKeyPress"
-        :placeholder="
-          !questionsStarted
-            ? `Bitte höre dir zuerst die Geschichte an und klicke auf 'Weiter zu den Fragen'`
-            : waitingForAnswer
-            ? 'Deine Antwort hier...'
-            : 'Schreibe deine Nachricht...'
-        "
-        :disabled="loading || !questionsStarted"
-        rows="1"
+        @keydown.enter.exact.prevent="handleKeyPress"
+        placeholder="Schreibe deine Nachricht..."
+        :disabled="loading || !selectedTopic || answerType === 'multiple'"
       ></textarea>
       <button
         @click="sendMessage"
-        :disabled="!newMessage.trim() || loading || !questionsStarted"
-        :class="{ 'disabled-button': !questionsStarted }"
+        :disabled="!newMessage.trim() || loading || answerType === 'multiple'"
       >
-        {{ loading ? "Sending..." : "Senden" }}
+        Senden
       </button>
     </div>
   </div>
@@ -628,13 +1117,161 @@ html,
 }
 
 .topic-button:disabled {
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: not-allowed;
   background-color: #6c757d;
 }
 
 .topic-button--selected {
   background-color: #28a745 !important;
+}
+
+.answer-type-container {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.answer-type-button {
+  background-color: #f8f9fa;
+  color: #1a73e8;
+  border: 1px solid #dadce0;
+  border-radius: 20px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  text-align: center;
+}
+
+.answer-type-button:hover {
+  background-color: #1a73e8;
+  border-color: #1a73e8;
+  color: white;
+}
+
+.answer-type-button:hover small {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Multiple Choice Styles */
+.choices-container {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.choices-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px 0;
+}
+
+.choice-item {
+  margin: 8px 0;
+  padding: 0;
+}
+
+.choice-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.choice-option:hover {
+  background-color: #f5f5f5;
+}
+
+.choice-radio {
+  margin-right: 12px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.choice-text {
+  font-size: 15px;
+  line-height: 1.4;
+  color: #202124;
+}
+
+.question-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.next-question-button {
+  background-color: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.next-question-button:hover:not(:disabled) {
+  background-color: #1765cc;
+}
+
+.next-question-button:disabled {
+  background-color: #e0e0e0;
+  color: #9e9e9e;
+  cursor: not-allowed;
+}
+
+.restart-button {
+  background-color: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background-color 0.2s;
+}
+
+.restart-button:hover {
+  background-color: #1765cc;
+}
+
+.question-text {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  line-height: 1.4;
+  color: #202124;
+}
+
+.answer-type-button:active {
+  background-color: #e8f0fe;
+  transform: translateY(1px);
+}
+
+.answer-type-button span {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.answer-type-button small {
+  font-size: 11px;
+  color: #5f6368;
+  font-weight: normal;
+  display: block;
 }
 
 .message.sent {
