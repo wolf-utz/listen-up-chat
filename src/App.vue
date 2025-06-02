@@ -743,7 +743,7 @@ const showQuestions = (storyData: StoryData) => {
             <div>
               {{ message.text }}
             </div>
-            <div v-if="!showAnswerTypeSelection" class="topics-container">
+            <div class="topics-container">
               <button
                 v-for="(topic, index) in topics"
                 :key="index"
@@ -947,76 +947,6 @@ html,
   margin-top: 12px;
 }
 
-.topic-button {
-  background-color: #f5f7fa;
-  border: 1px solid #e1e4e8;
-  padding: 8px 16px;
-  border-radius: 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin: 4px;
-}
-
-.topic-button:hover {
-  background-color: #f1f3f4;
-  border-color: #dadce0;
-}
-
-.topic-button--selected {
-  background-color: #e8f0fe;
-  border-color: #d2e3fc;
-  color: #1967d2;
-}
-
-.action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background-color: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.action-button:hover {
-  background-color: #1557b0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.action-button--active {
-  background-color: #0d47a1 !important;
-}
-
-.action-button--secondary {
-  background-color: #5f6368;
-  padding: 10px;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-button--secondary:hover {
-  background-color: #4a4e52;
-}
-
-.action-button svg {
-  color: white;
-}
-
-.action-button svg {
-  flex-shrink: 0;
-}
-
 .story-text {
   margin-top: 16px;
   padding: 12px;
@@ -1030,20 +960,9 @@ html,
   text-align: right;
 }
 
-.continue-button {
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.continue-button:hover {
-  background-color: #218838;
+.continue-button,
+.restart-button {
+  margin-top: 12px;
 }
 
 .message-content {
@@ -1058,72 +977,11 @@ html,
   max-width: 100%;
 }
 
-.topic-button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  margin: 2px;
-}
-
-.topic-button:hover {
-  background-color: #0056b3;
-}
-
-.topic-button:active:not(:disabled) {
-  background-color: #004085;
-  transform: translateY(1px);
-}
-
-.topic-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  background-color: #6c757d;
-}
-
-.topic-button--selected {
-  background-color: #28a745 !important;
-}
-
 .answer-type-container {
   display: flex;
   gap: 12px;
   margin-top: 12px;
   flex-wrap: wrap;
-}
-
-.answer-type-button {
-  background-color: #f8f9fa;
-  color: #1a73e8;
-  border: 1px solid #dadce0;
-  border-radius: 20px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 120px;
-  text-align: center;
-}
-
-.answer-type-button:hover {
-  background-color: #1a73e8;
-  border-color: #1a73e8;
-  color: white;
-}
-
-.answer-type-button:hover small {
-  color: rgba(255, 255, 255, 0.9) !important;
 }
 
 /* Multiple Choice Styles */
@@ -1175,45 +1033,6 @@ html,
   margin-top: 16px;
 }
 
-.next-question-button {
-  background-color: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 10px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.next-question-button:hover:not(:disabled) {
-  background-color: #1765cc;
-}
-
-.next-question-button:disabled {
-  background-color: #e0e0e0;
-  color: #9e9e9e;
-  cursor: not-allowed;
-}
-
-.restart-button {
-  background-color: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 10px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-top: 12px;
-  transition: background-color 0.2s;
-}
-
-.restart-button:hover {
-  background-color: #1765cc;
-}
-
 .question-text {
   font-size: 16px;
   font-weight: 500;
@@ -1222,21 +1041,14 @@ html,
   color: #202124;
 }
 
-.answer-type-button:active {
-  background-color: #e8f0fe;
-  transform: translateY(1px);
-}
-
-.answer-type-button span {
-  display: block;
-  margin-bottom: 2px;
+.answer-type-button {
+  display: flex;
+  flex-direction: column;
 }
 
 .answer-type-button small {
   font-size: 11px;
-  color: #5f6368;
   font-weight: normal;
-  display: block;
 }
 
 .message.sent {
@@ -1258,11 +1070,6 @@ html,
   opacity: 0.8;
   margin-top: 4px;
   text-align: right;
-}
-
-.disabled-button {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .input-container {
@@ -1296,24 +1103,79 @@ textarea:focus {
   border-color: #007bff;
 }
 
+/* Global Button Styles */
+:root {
+  --button-bg: #1a73e8;
+  --button-text: white;
+  --button-hover-bg: #1557b0;
+  --button-disabled-bg: #e0e0e0;
+  --button-disabled-text: #000;
+}
+
 button {
-  background-color: #007bff;
-  color: white;
+  /* Base styles */
+  font-family: inherit;
+  background-color: var(--button-bg);
+  color: var(--button-text);
   border: none;
   border-radius: 20px;
-  padding: 0 20px;
-  height: 44px;
+  padding: 10px 20px;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   white-space: nowrap;
-  margin-left: 8px;
-  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 2px;
+  text-align: center;
+  line-height: 1.5;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
+/* Hover state */
 button:not(:disabled):hover {
-  background-color: #6c757d;
+  --button-bg: #1557b0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Active/pressed state */
+button:not(:disabled):active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Disabled state */
+button:disabled {
+  color: var(--button-disabled-text);
+  background-color: var(--button-disabled-bg);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Disabled overlay */
+button:disabled::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.7);
+  z-index: 1;
+}
+
+/* Focus state */
+button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.4);
 }
 
 /* Scrollbar styling */
@@ -1347,12 +1209,9 @@ button:not(:disabled):hover {
     width: 100%;
     margin: 0;
     padding: 10px 16px;
-    /* min-height: 44px;
-    max-height: 120px; */
   }
 
   button {
-    /* width: 100%; */
     margin: 0;
     height: 44px;
   }
