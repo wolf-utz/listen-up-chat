@@ -127,21 +127,12 @@ const handleProgressClick = (e: MouseEvent) => {
 
 // Update progress bar
 const updateProgress = () => {
-  console.log("Updating progress...", {
-    currentTime: audioElement.currentTime,
-    duration: audioElement.duration,
-    readyState: audioElement.readyState,
-    buffered:
-      audioElement.buffered.length > 0 ? audioElement.buffered.end(0) : 0,
-  });
-
   if (
     audioElement.duration &&
     isFinite(audioElement.duration) &&
     audioElement.duration > 0
   ) {
     const progress = (audioElement.currentTime / audioElement.duration) * 100;
-    console.log("Progress calculated:", progress + "%");
     audioProgress.value = Math.min(100, Math.max(0, progress));
     emit("timeupdate", {
       currentTime: audioElement.currentTime,
@@ -190,10 +181,8 @@ watch(
   () => props.audioUrl,
   (newUrl) => {
     if (newUrl) {
-      console.log("URL changed to:", newUrl);
       cleanup();
       const fullUrl = getFullAudioUrl(newUrl);
-      console.log("Setting audio src to:", fullUrl);
       audioElement.src = fullUrl;
 
       // Reset progress when URL changes
