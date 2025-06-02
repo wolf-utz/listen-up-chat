@@ -573,21 +573,11 @@ const allQuestionsAnswered = () => {
 };
 
 const sendMessage = async () => {
-  console.log("sendMessage called", {
-    newMessage: newMessage.value,
-    loading: loading.value,
-    waitingForAnswer: waitingForAnswer.value,
-    currentQuestionIndex: currentQuestionIndex.value,
-    currentQuestions: currentQuestions.value,
-  });
-
   if (!newMessage.value.trim()) {
-    console.log("Message is empty");
     return;
   }
 
   if (loading.value) {
-    console.log("Message not sent - currently loading");
     return;
   }
 
@@ -674,7 +664,6 @@ const handleKeyPress = (e: KeyboardEvent) => {
 const showQuestions = (storyData: StoryData) => {
   if (continueButtonClicked.value) return; // Prevent multiple clicks
   continueButtonClicked.value = true; // Mark button as clicked
-  console.log("showQuestions called", { storyData });
   currentStory.value = storyData;
 
   // Process questions - they might be strings or objects
@@ -716,11 +705,6 @@ const showQuestions = (storyData: StoryData) => {
   currentQuestionIndex.value = 0;
   waitingForAnswer.value = true;
   questionsStarted.value = true;
-
-  console.log("Questions set up", {
-    questionCount: currentQuestions.value.length,
-    firstQuestion: currentQuestions.value[0]?.question,
-  });
 
   // Show the first question
   showCurrentQuestion();
