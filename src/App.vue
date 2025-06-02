@@ -71,7 +71,6 @@ const continueButtonClicked = ref(false);
 const currentQuestionIndex = ref(-1);
 const currentQuestions = ref<Question[]>([]);
 const selectedChoices = ref<Record<number, number>>({});
-const textAnswers = ref<Record<number, string>>({});
 const answeredQuestions = ref<Record<number, boolean>>({});
 const waitingForAnswer = ref(false);
 const questionsStarted = ref(false);
